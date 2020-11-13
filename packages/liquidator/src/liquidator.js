@@ -18,6 +18,7 @@ class Liquidator {
    * @param {Object} votingContract DVM to query price requests.
    * @param {Object} syntheticToken Synthetic token (tokenCurrency).
    * @param {Object} priceFeed Module used to query the current token price.
+   * @param {Object} carbonPriceFeed Module used to query the current carbon Price.
    * @param {String} account Ethereum account from which to send txns.
    * @param {Object} [config] Contains fields with which constructor will attempt to override defaults.
    * @param {Object} empProps Contains EMP contract state data. Expected:
@@ -33,7 +34,8 @@ class Liquidator {
     gasEstimator,
     votingContract,
     syntheticToken,
-    priceFeeds,
+    priceFeed,
+    tiingoPriceFeed,
     account,
     empProps,
     config
@@ -60,7 +62,10 @@ class Liquidator {
     this.syntheticToken = syntheticToken;
 
     // Instance of the price feed to get the realtime token price.
-    this.priceFeeds = priceFeeds;
+    this.priceFeed = priceFeed;
+
+    //Instance of tiingoPriceFeed to get the realtime carbon price.
+    this.tiingoPriceFeed = tiingoPriceFeed;
 
     // The EMP contract collateralization Ratio is needed to calculate minCollateralPerToken.
     this.empCRRatio = empProps.crRatio;
@@ -137,7 +142,7 @@ class Liquidator {
 
   // Update the empClient, gasEstimator and price feed. If a client has recently updated then it will do nothing.
   async update() {
-    await Promise.all([this.empClient.update(), this.gasEstimator.update(), this.priceFeed.update()]);
+    await Promise.all([this.empClient.update(), this.gasEstimator.update(), this.priceFeed.update(), this.tiingoPriceFeed.update()]);
   }
 
   // Queries underCollateralized positions and performs liquidations against any under collateralized positions.
@@ -149,13 +154,48 @@ class Liquidator {
       message: "Checking for liquidatable positions and preforming liquidations"
     });
 
+
     // If an override is provided, use that price. Else, get the latest price from the price feed.
-    const price = liquidatorOverridePrice
+    var cryptoWatchPrice = liquidatorOverridePrice
       ? this.toBN(liquidatorOverridePrice.toString())
       : this.priceFeed.getCurrentPrice();
 
+    if(this.priceFeed.invertPrice == "true"){
+      cryptoWatchPrice = this._invertPriceSafely(cryptoWatchPrice);
+    }
+    if (!cryptoWatchPrice) {
+      throw new Error("Cannot liquidate: cryptoWatchPrice-feed returned invalid value");
+    }
+
+    // If an override is provided, use that price. Else, get the latest price from the carbon price feed.
+    var carbonPrice = liquidatorCarbonOverridePrice
+    ? this.toBN(liquidatorCarbonOverridePrice.toString())
+    : this.carbonPriceFeed.getCurrentPrice();
+
+    if(this.carbonPriceFeed.invertPrice == "true"){
+      carbonPrice = this._invertPriceSafely(carbonPrice);
+    }
+
+    if (!carbonPrice) {
+      throw new Error("Cannot liquidate: carbon-Price-feed returned invalid value");
+    }
+
+    var price;
+    
+    if(carbonPrice && cryptoWatchPrice){
+      // compute krbnperl price
+      // krbnperl = (krbn-usd price) * ( 1 / perl-usd price)
+       price = carbonPrice.mul(this._invertPriceSafely(cryptoWatchPrice));
+    }else if(!carbonPrice && cryptoWatchPrice){
+      price = cryptoWatchPrice
+    }else if(carbonPrice && !cryptoWatchPrice){
+      price = carbonPrice
+    }else{
+      price = null;
+    }
+
     if (!price) {
-      throw new Error("Cannot liquidate: price feed returned invalid value");
+      throw new Error("Cannot compute price for carbonperl");
     }
 
     // The `price` is a BN that is used to determine if a position is liquidatable. The higher the
