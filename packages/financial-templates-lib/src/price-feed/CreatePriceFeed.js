@@ -4,6 +4,7 @@ const { MedianizerPriceFeed } = require("./MedianizerPriceFeed");
 const { CryptoWatchPriceFeed } = require("./CryptoWatchPriceFeed");
 const { UniswapPriceFeed } = require("./UniswapPriceFeed");
 const { BalancerPriceFeed } = require("./BalancerPriceFeed");
+const {TiingoPriceFeed} = require ('./TiingoPriceFeed');
 
 const Uniswap = require("@uma/core/build/contracts/Uniswap.json");
 const ExpiringMultiParty = require("@uma/core/build/contracts/ExpiringMultiParty.json");
@@ -26,6 +27,36 @@ async function createPriceFeed(logger, web3, networker, getTime, config) {
     return new CryptoWatchPriceFeed(
       logger,
       web3,
+      config.apiKey,
+      config.exchange,
+      config.pair,
+      config.lookback,
+      networker,
+      getTime,
+      config.minTimeBetweenUpdates,
+      config.invertPrice, // Not checked in config because this parameter just defaults to false.
+      config.decimals // This defaults to 18 unless supplied by user
+    );
+  }else if (config.type === 'tiingo') {
+    const requiredFields = [
+      'exchange',
+      'pair',
+      'lookback',
+      'minTimeBetweenUpdates',
+    ];
+
+    if (isMissingField (config, requiredFields, logger)) {
+      return null;
+    }
+
+    logger.debug ({
+      at: 'createPriceFeed',
+      message: 'Creating CarbonPriceFeed',
+      config,
+    });
+
+    return new TiingoPriceFeed (
+      logger,
       config.apiKey,
       config.exchange,
       config.pair,

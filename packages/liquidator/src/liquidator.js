@@ -33,7 +33,7 @@ class Liquidator {
     gasEstimator,
     votingContract,
     syntheticToken,
-    priceFeed,
+    priceFeeds,
     account,
     empProps,
     config
@@ -60,7 +60,7 @@ class Liquidator {
     this.syntheticToken = syntheticToken;
 
     // Instance of the price feed to get the realtime token price.
-    this.priceFeed = priceFeed;
+    this.priceFeeds = priceFeeds;
 
     // The EMP contract collateralization Ratio is needed to calculate minCollateralPerToken.
     this.empCRRatio = empProps.crRatio;
